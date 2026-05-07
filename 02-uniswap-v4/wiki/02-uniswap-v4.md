@@ -34,6 +34,9 @@ Every pool is distinguished by **four** fields that must all agree for two calls
 | **Tick spacing** | Which **tick** grid the pool uses for prices and liquidity steps. Spacing is tied to how the pool steps through `sqrtPrice` and which ticks may hold liquidity; different spacing ⇒ different pool.                                   |
 | **Hooks**        | The address of the optional **hooks** contract for that pool, or the **zero address** if there are no hooks. Same pair, fee, and tick spacing but a different hooks contract (including `no hooks` vs `some hooks`) ⇒ different pool. |
 
+For a practical explanation of how **price relates to ticks**, see [Introducing ticks in Uniswap V3 (RareSkills)](https://rareskills.io/post/uniswap-v3-ticks).  
+For a practical guide on converting a **price into an initializable tick**, see [How to convert a price to a tick that can be initialized (Uniswap Support)](https://support.uniswap.org/hc/en-us/articles/21068898875661-How-to-convert-a-price-to-a-tick-that-can-be-initialized).
+
 Swaps, mints, burns, and donations all pass this **full key** so the `PoolManager` updates the correct pool. LP **positions** (concentrated ranges) are attached to that same pool identity; they are not a substitute for the key—two positions only share liquidity if they sit on the **same** pool key.
 
 ### [Non Fungible Liquidity](https://blog.uniswap.org/uniswap-v3#nonfungible-liquidity)
@@ -73,3 +76,5 @@ v4 uses **flash accounting**: operations like swaps can **net** debits and credi
 
 - [Uniswap v4 overview](https://docs.uniswap.org/contracts/v4/overview)
 - [Uniswap v4 whitepaper / technical deep dives](https://uniswap.org/) (see official blog and docs for the latest links)
+- [Introducing ticks in Uniswap V3 (RareSkills)](https://rareskills.io/post/uniswap-v3-ticks)
+- [How to convert a price to a tick that can be initialized (Uniswap Support)](https://support.uniswap.org/hc/en-us/articles/21068898875661-How-to-convert-a-price-to-a-tick-that-can-be-initialized)

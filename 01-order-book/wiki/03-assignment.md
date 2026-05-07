@@ -32,6 +32,7 @@ Build a smart contract that allows users to place and match orders between `PNPT
 - [ ] **TODO:** Implement order matching logic.
 - [ ] **TODO:** Emit events for order creation, matching, fill updates, and cancellation.
 - [ ] **TODO:** Ensure all Part 2 tests pass.
+- [ ] **TODO:** Add comments for all functions and logic in functions.
 
 ### Deliverables
 

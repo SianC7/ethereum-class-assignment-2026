@@ -21,8 +21,6 @@ Follow the official guide: [Uniswap v4 Core](https://github.com/Uniswap/v4-core)
 yarn add @uniswap/v4-core
 ```
 
-- [ ] **TODO:** Confirm versions resolve and the app or scripts build.
-
 ### Deliverables
 
 - Updated `package.json` / lockfile showing `@uniswap/v4-core` installed via Yarn.
