@@ -110,11 +110,12 @@ describe("Uniswap v4 Assignment Solution", function () {
     const tickLower = targetTick - (targetTick % 60n) - 120n;
     const tickUpper = targetTick - (targetTick % 60n) + 120n;
 
+    // approving the RewardTokensManager contract to spend the sender's PNP and FNB tokens
     await pnpToken.connect(owner).approve(await tokensManager.getAddress(), MINT_AMOUNTS);
     await fnbToken.connect(owner).approve(await tokensManager.getAddress(), MINT_AMOUNTS);
 
-    const poolId = await tokensManager.getPoolId();
-    const tx = await tokensManager.mintLiquidity(Number(tickLower), Number(tickUpper), MINT_AMOUNTS, MINT_AMOUNTS);
+    const poolId = await tokensManager.getPoolId(); // get contract's poolId
+    const tx = await tokensManager.mintLiquidity(Number(tickLower), Number(tickUpper), MINT_AMOUNTS, MINT_AMOUNTS); // mint liquidity through the manager
     const receipt = await tx.wait();
     const tokensManagerAddress = await tokensManager.getAddress();
     let positionId = 0n;
@@ -135,8 +136,8 @@ describe("Uniswap v4 Assignment Solution", function () {
         /* not this contract's event shape */
       }
     }
-    expect(positionId).to.be.gt(0n);
-    expect(emittedLiquidity).to.be.gt(0n);
+    expect(positionId).to.be.gt(0n); // positionId should be non-zero
+    expect(emittedLiquidity).to.be.gt(0n); // emitted liquidity should be non-zero
 
     await expect(tx)
       .to.emit(tokensManager, "LiquidityMinted")
