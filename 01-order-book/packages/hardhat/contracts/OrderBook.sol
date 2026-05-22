@@ -4,9 +4,9 @@ pragma solidity >=0.8.0 <0.9.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-using SafeERC20 for IERC20;
-
 contract OrderBook {
+    using SafeERC20 for IERC20;
+
     // State Variables: permanently store and maintain the contract's data on the blockchain
     struct Order { // Structure to represent an order
         address traderAddress; // address of the trader who placed the order
@@ -18,8 +18,7 @@ contract OrderBook {
 
     uint256 public orderIdCounter = 0; // Counter to assign unique IDs to orders
 
-    mapping(uint256 => Order) public buyOrders; // Mapping to store buyorders (bids) by their ID
-    mapping(uint256 => Order) public sellOrders;
+    mapping(uint256 => Order) public Orders; // Mapping to store orders by their ID
 
     address public immutable tokenA;
     address public immutable tokenB;
@@ -37,6 +36,9 @@ contract OrderBook {
 
     event OrderMatched(uint256 buyOrderId, uint256 sellOrderId);
 
+    event OrderFilled(uint256 orderId, uint256 filledAmount);
+    event OrderPartiallyFilled(uint256 orderId, uint256 filledAmount);
+
     event OrderCanceled(uint256 orderId);
 
     // Custome Errors
@@ -49,68 +51,64 @@ contract OrderBook {
 
     // Constructor
     constructor(address _tokenA, address _tokenB) {
-        tokenA = _tokenA; // What the buyer wants
-        tokenB = _tokenB; // What the seller wants
+        tokenA = _tokenA; // What the buyer wants (PNPT)
+        tokenB = _tokenB; // What the seller wants (FNBT)
     }
 
     // Functions
-
+    /// @notice placeBuyOrder allows a user to place a buy order with the amount of tokenA they want to buy and how much in tokenB they are willing to pay.
+    /// @param amount - amount of tokenA the buyer wants to buy.
+    /// @param price - price the buyer is willing to pay for each unit of tokenA in terms of tokenB.
+    /// @return orderId - the unique ID of the newly placed buy order.
     function placeBuyOrder(uint256 amount, uint256 price) external returns (uint256 orderId) {
         // Check price and amount are valid
         if (amount <= 0) revert InvalidAmount();
         if (price <= 0) revert InvalidPrice();
 
-        if (orderIdCounter == 0) {
-            orderId = orderIdCounter;
-        } else {
-            orderIdCounter += 1; // Increment the order ID counter to get a new unique order ID
-            orderId = orderIdCounter; // Assign the new order ID to the variable to be
-        }
+        // get order id from counter and increment counter after for next order
+        orderId = orderIdCounter++;
 
-        // Check if the buyer has enough tokens to buy before placing the order.
-
-        // Create state variable and add it to the buyOrders mapping:
-        buyOrders[orderId] = Order({
+        // Create state variable and add it to the Orders mapping:
+        Orders[orderId] = Order({
             traderAddress: msg.sender, // sender of the order request
-            initialAmount: amount, // The total amount of tokens the buyer wants to buy
+            initialAmount: amount, // The total amount of tokenA the buyer wants to buy (TRADE_AMOUNT)
             filledAmount: 0, // no part of the order is filled when the order is created
-            price: price, // The price at which the buyer wants to buy the tokens
+            price: price, // The price at which the buyer wants to buy the tokenA in terms of tokenB (PRICE)
             active: true // The order is active when it's placed
         });
-
-        // Add to mapping:
 
         // Trigger event:
         emit OrderPlaced(
             orderId,
             msg.sender, // The address of the trader placing the order (sender of the transaction).
             0, // buy order
-            tokenB, // address of the token buyer is selling
-            tokenA, // address of the token the buyer wants
+            tokenB, // address of tokenB that the buyer is selling for tokenA
+            tokenA, // address of the tokenA the buyer wants
             amount,
             price
         );
 
-        return orderId; // Return the order ID of the newly placed buy order.
+        return orderId; // Return the order ID
     }
 
+    /// @notice placeSellOrder allows a user to place a sell order with the amount of tokenA they want to sell and how much in tokenB they are willing to receive.
+    /// @param amount - amount of tokenA the seller wants to sell.
+    /// @param price - price the seller is willing to receive for each unit of tokenA in terms of tokenB.
+    /// @return orderId - the unique ID of the newly placed sell order.
     function placeSellOrder(uint256 amount, uint256 price) external returns (uint256 orderId) {
         // Check price and amount are valid
         if (amount <= 0) revert InvalidAmount();
         if (price <= 0) revert InvalidPrice();
 
-        // Check if the seller has enough tokens to sell before placing the order.
+        // get order id from counter and increment counter after for next order
+        orderId = orderIdCounter++;
 
-        // Create a new sell order with the specified amount and price, and return the order ID.
-        orderIdCounter += 1; // Increment the order ID counter to get a new unique order ID
-        orderId = orderIdCounter; // Assign the new order ID to the variable to be
-
-        // Create order state variable and add it to the sellOrders mapping:
-        sellOrders[orderId] = Order({
+        // Create order state variable and add it to the Orders mapping:
+        Orders[orderId] = Order({
             traderAddress: msg.sender, // sender of the order request
-            initialAmount: amount, // The total amount of tokens the seller wants to sell
+            initialAmount: amount, // The total amount of tokenA the seller wants to sell (TRADE_AMOUNT)
             filledAmount: 0, // no part of the order is filled when the order is created
-            price: price, // The price the seller wants to sell the tokens at
+            price: price, // The price the seller wants to sell the tokenA at (PRICE)
             active: true // The order is active when it's placed.
         });
 
@@ -119,33 +117,34 @@ contract OrderBook {
             orderId,
             msg.sender, // The address of the trader placing the order (sender of the transaction).
             1, // sell order
-            tokenA, // address of the token the seller is selling
-            tokenB, // address of the token the seller wants
+            tokenA, // address of tokenA that the seller is selling for tokenB
+            tokenB, // address of the tokenB, which the seller wants
             amount,
             price
         );
 
-        return orderId; // Return the order ID of the newly placed sell order.
+        return orderId; // Return the order ID
     }
-
+    /// @notice Matching Engine to find buy and sell orders, check if they are compatible (buy price >= sell price), and execute the trade by transferring tokens.
+    /// @param buyOrderId - the ID of the order the buyer has placed.
+    /// @param sellOrderId - the ID of the order the seller has placed.
     function matchOrders(uint256 buyOrderId, uint256 sellOrderId) external {
-        // Matching Engine
-        // Find the buy and sell orders by their IDs, check if they are compatible for a trade (buy price >= sell price), and execute the trade by transferring the appropriate amounts of tokens between the buyer and seller.
-
+        Order memory buyOrder = Orders[buyOrderId];
+        Order memory sellOrder = Orders[sellOrderId];
         // If the orderIds exist and are active
-        if (buyOrders[buyOrderId].traderAddress == address(0) || sellOrders[sellOrderId].traderAddress == address(0)) {
+        if (buyOrder.traderAddress == address(0) || sellOrder.traderAddress == address(0)) {
             revert OrderNotFound();
         }
-        Order memory buyOrder = buyOrders[buyOrderId];
-        Order memory sellOrder = sellOrders[sellOrderId];
+
+        require(buyOrder.active, "Buy order is not active");
+        require(sellOrder.active, "Sell order is not active");
 
         // Check asking price >= selling price
         if (buyOrder.price < sellOrder.price) {
             revert PriceMismatch();
         }
 
-        // Get the maximum amount of tokens that can be transfered between the orders
-        // seller sets the minimum price
+        // Get the maximum amount of tokenA that can be transfered between the orders
         uint256 transferAmount = 0;
 
         if ((buyOrder.initialAmount - buyOrder.filledAmount) < (sellOrder.initialAmount - sellOrder.filledAmount)) {
@@ -154,21 +153,22 @@ contract OrderBook {
             transferAmount = sellOrder.initialAmount - sellOrder.filledAmount;
         }
 
-        // // Check if the parties can actually transfer the tokens before updating the order status and transferring the tokens.
-        // // allowance() to check if the user has approved the order book contract to transfer the tokens on their behalf
-        // // balanceOf() to check if a party has enough tokens to transfer.
-        // if (
-        //     IERC20(tokenA).allowance(sellOrder.traderAddress, address(this)) <= transferAmount ||
-        //     IERC20(tokenA).balanceOf(sellOrder.traderAddress) <= transferAmount
-        // ) {
-        //     revert InsufficientBalance(); // Return error if the seller has not approved enough tokens for transfer
-        // }
-        // if (
-        //     IERC20(tokenB).allowance(buyOrder.traderAddress, address(this)) <= transferAmount * sellOrder.price ||
-        //     IERC20(tokenB).balanceOf(buyOrder.traderAddress) <= transferAmount * sellOrder.price
-        // ) {
-        //     revert InsufficientBalance(); // Return error if the buyer has not approved enough tokens for transfer
-        // }
+        // Check if tokens A and B can be transfered first.
+        // allowance() to check if the user has approved the order book contract to transfer the tokens on their behalf
+        // balanceOf() to check if a party has enough tokens to transfer.
+        if (
+            IERC20(tokenA).allowance(sellOrder.traderAddress, address(this)) < transferAmount ||
+            IERC20(tokenA).balanceOf(sellOrder.traderAddress) < transferAmount
+        ) {
+            revert InsufficientBalance(); // Return error if the seller has not approved enough tokens for transfer
+        }
+        if (
+            // token A = 2 token B
+            IERC20(tokenB).allowance(buyOrder.traderAddress, address(this)) < transferAmount * sellOrder.price ||
+            IERC20(tokenB).balanceOf(buyOrder.traderAddress) < transferAmount * sellOrder.price
+        ) {
+            revert InsufficientBalance(); // Return error if the buyer has not approved enough tokens for transfer
+        }
 
         // Update fill amounts
         buyOrder.filledAmount = buyOrder.filledAmount + transferAmount;
@@ -176,79 +176,78 @@ contract OrderBook {
 
         // Update status of orders if they are fully filled
         if (buyOrder.initialAmount == buyOrder.filledAmount) {
+            emit OrderFilled(buyOrderId, buyOrder.filledAmount);
             buyOrder.active = false; // Order has been completed
+        } else {
+            emit OrderPartiallyFilled(buyOrderId, buyOrder.filledAmount);
         }
 
         if (sellOrder.initialAmount == sellOrder.filledAmount) {
+            emit OrderFilled(sellOrderId, sellOrder.filledAmount);
             sellOrder.active = false; // Order has been completed
+        } else {
+            emit OrderPartiallyFilled(sellOrderId, sellOrder.filledAmount);
         }
 
         // Write updates back to mapping
-        buyOrders[buyOrderId] = buyOrder;
-        sellOrders[sellOrderId] = sellOrder;
+        Orders[buyOrderId] = buyOrder;
+        Orders[sellOrderId] = sellOrder;
 
-        // Actually send the tokens:
-        // Seller sends tokenB (FNBT) to buyer, buyer sends tokenA (PNPT) to seller at the seller's price.
+        // Transfer the tokens
+        // Seller sends tokenA (PNPT) to buyer, buyer sends tokenB (FNBT) to seller at the seller's price.
         IERC20(tokenA).safeTransferFrom(sellOrder.traderAddress, buyOrder.traderAddress, transferAmount); // Seller sends tokenA to buyer
         IERC20(tokenB).safeTransferFrom(
             buyOrder.traderAddress,
             sellOrder.traderAddress,
             transferAmount * sellOrder.price
-        ); // Buyer sends tokenB to seller at the seller's price
+        ); // Buyer sends tokenB to seller at the seller's price (1 token A = 2 token B)
 
-        // Trigger event:
+        // Trigger event
         emit OrderMatched(buyOrderId, sellOrderId); //log the matched orders
     }
+
+    /// @notice Cancel the order in the order book. Check if the cancellation is authorised.
+    /// @param orderId - the ID of the order to be cancelled.
     function cancelOrder(uint256 orderId) external {
-        if (buyOrders[orderId].active) {
-            Order memory buyOrder = buyOrders[orderId];
-            if (msg.sender != buyOrder.traderAddress) {
+        Order memory thisOrder = Orders[orderId];
+        if (thisOrder.active) {
+            if (msg.sender != thisOrder.traderAddress) {
                 revert UnauthorizedCancellation();
             } else {
                 // Change the order status to inactive and prevent any further matching of the order.
-                buyOrder.active = false;
-                buyOrders[orderId] = buyOrder;
+                thisOrder.active = false;
+                Orders[orderId] = thisOrder; // Write the update back to mapping
                 // Trigger event:
                 emit OrderCanceled(orderId);
             }
-        } else if (sellOrders[orderId].active) {
-            Order memory sellOrder = sellOrders[orderId];
-            if (msg.sender != sellOrder.traderAddress) {
-                revert UnauthorizedCancellation();
-            } else {
-                sellOrder.active = false;
-                sellOrders[orderId] = sellOrder;
-                emit OrderCanceled(orderId);
-            }
         }
     }
 
+    /// @notice remaining shows the remaining amount of an order that is yet to be filled.
+    /// @param orderId - the ID of the order to be checked.
+    /// @return remainingAmount - the remaining amount of the order (initialAmount - filledAmount).
     function remaining(uint256 orderId) external view returns (uint256) {
         // show the remaining amount of the order that is yet to be forfilled (initialAmount - filledAmount).
         uint256 remainingAmount = 0;
+        Order memory thisOrder = Orders[orderId]; // loads a copy of the order data based on orderId from the Orders mapping.
 
-        if (buyOrders[orderId].traderAddress != address(0)) {
-            Order memory buyOrder = buyOrders[orderId];
-            remainingAmount = buyOrder.initialAmount - buyOrder.filledAmount;
-            return remainingAmount;
-        } else if (sellOrders[orderId].traderAddress != address(0)) {
-            Order memory sellOrder = sellOrders[orderId];
-            remainingAmount = sellOrder.initialAmount - sellOrder.filledAmount;
+        if (thisOrder.traderAddress != address(0)) {
+            // if the order exists:
+            remainingAmount = thisOrder.initialAmount - thisOrder.filledAmount;
+            require(remainingAmount >= 0, "Filled amount cannot exceed initial amount");
             return remainingAmount;
         } else {
-            revert OrderNotFound(); // Return false if the order is not active
+            revert OrderNotFound(); // Return error if the order is not active
         }
     }
 
-    // Check if the order is still active and has remaining amount to be filled.
+    /// @notice isOpen checks if an order is still active and has a remaining amount to be filled.
+    /// @param orderId - the ID of the order to be checked.
+    /// @return bool - true if the order is active and has remaining amount to be filled
     function isOpen(uint256 orderId) external view returns (bool) {
-        // Try to find the order in buyOrders mapping and check if it's active
-        if (buyOrders[orderId].active) {
-            return true; // Return true if the buy order exists and is active
-
-            // Try to find the order in sellOrders mapping and check if it's active
-        } else if (sellOrders[orderId].active) {
-            return true; // Return true if the sell order exists and is active
+        Order memory thisOrder = Orders[orderId];
+        if (thisOrder.active && (thisOrder.initialAmount - thisOrder.filledAmount) > 0) {
+            return true; // Return true if the order exists and is active
         } else {
             return false; // Return false if the order is not active
         }
