@@ -16,7 +16,7 @@ import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPosition
 
 /// @notice A smart contract that creates a Uniswap v4 liquidity pool using PoolManager
 /// @notice and also mints a concentrated liquidity position in the pool using PositionManager.
-/// @notice RewardTokensManager inherits from Ownable.
+/// @notice RewardTokensManager inherits from Ownable to enable onlyOwner modifier.
 contract RewardTokensManager is Ownable {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
@@ -84,7 +84,6 @@ contract RewardTokensManager is Ownable {
 
         (address currency0, ) = getCanonicalCurrencies();
         int24 targetTick;
-        //OR: uint160 targetSqrtPrice;
 
         if (currency0 == fnbToken) {
             // price = FNBT/PNPT = 0.1/0.01 = 10
@@ -102,14 +101,14 @@ contract RewardTokensManager is Ownable {
     }
 
     /// @notice Allows the poolId to be read/ retrieved.
-    /// @notice public and view method modifer so external callers can also (only) read the canonical currency order.
+    /// @notice public and view method modifer so external callers can (only) read the canonical currency order.
     /// @return  poolId - return the id of the liquidity pool converted into bytes32 format.
     function getPoolId() public view returns (bytes32) {
         return PoolId.unwrap(pool.toId());
     }
 
     /// @notice Allows the canonical order of the currency addresses to be read/retrieved.
-    /// @notice public and view method modifer so external callers can also (only) read the canonical currency order.
+    /// @notice public and view method modifer so external callers can (only) read the canonical currency order.
     /// @return currency0 - The token/currency address with the smaller address value.
     /// @return currency1 - The token/currency address with the larger address value.
     function getCanonicalCurrencies() public view returns (address currency0, address currency1) {
@@ -190,15 +189,13 @@ contract RewardTokensManager is Ownable {
         // Validate user inputs and tick constraints.
         require(amount0Desired > 0 && amount1Desired > 0, "Desired amounts must be greater than zero");
         require(tickLower < tickUpper, "tickLower must be smaller than tickUpper");
-        require(tickLower % int24(TICK_SPACING) == 0, "tickLower not aligned"); // Ensure ticks aligned to tick spacing (is a multiple of the spacing)
-        require(tickUpper % int24(TICK_SPACING) == 0, "tickUpper not aligned");
 
         // Ensure the chosen range includes the target tick for the tokens liquidity pool.
         if (tickLower > getTargetTick() || tickUpper < getTargetTick()) {
             revert TickRangeDoesNotCoverAssignmentPrice();
         }
         // Resolve and verify the liquidity pool.
-        poolId = getPoolId();
+        poolId = getPoolId(); // returns poolId as a bytes32 value
         require(createdPools(poolId), "Pool has not been created");
 
         // Compute liquidity from desired token amounts at the current pool price.
@@ -257,12 +254,12 @@ contract RewardTokensManager is Ownable {
         // Encode SETTLE_PAIR parameters (Encode mint operation):
         mintParams[1] = abi.encode(pool.currency0, pool.currency1);
 
-        // Mint the position and settle the pair with modifyLiquidities().
+        // Execute the mint operation
         positionManager.modifyLiquidities(abi.encode(actions, mintParams), block.timestamp + 60);
-        uint256 positionId = positionManager.nextTokenId() - 1; // get the positionId of the newly minted position (the next token ID minus one)
+        positionId = positionManager.nextTokenId() - 1; // get the positionId of the newly minted position (the next token ID minus one)
 
         // Verify mint succeeded.
-        require(positionId > 0, "Mint Unsuccessful");
+        require(positionId > 0, "Mint Unsuccessful"); // if minting failed, positionId would be 0
 
         // Return any unspent token dust
         uint256 remainingAmount0 = IERC20(currency0).balanceOf(address(this));
